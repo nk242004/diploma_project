@@ -1,0 +1,13 @@
+{% extends 'layout/basic.html' %}
+
+{% load django_bootstrap5 %}
+
+{% block title %}Delete Goods{% endblock %}
+
+{% block content %}
+<h2>Delete Profile {{ object.username }}</h2>
+<form method="post">
+    {% csrf_token %}
+    {% bootstrap_button 'Delete' button_class='btn-danger' %}
+</form>
+{% endblock %}

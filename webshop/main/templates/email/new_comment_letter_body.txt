@@ -1,0 +1,10 @@
+Dear User {{ author.username }}!
+
+To one of yours goods has been added a new comment.
+To read it, please, click on this link
+
+{{ host }}{% url 'main:profile_bb_detail' pk=comment.bb.pk %}
+
+Farewell!
+
+Sincerely yours, "Web Shop" site administration

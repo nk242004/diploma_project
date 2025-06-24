@@ -1,0 +1,179 @@
+{% extends 'layout/basic.html' %}
+
+{% load thumbnail %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}User Profile - {{ user.username }}{% endblock %}
+
+{% block content %}
+<style>
+    .profile-card {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 20px;
+        margin-bottom: 30px;
+    }
+    .stat-card {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+    .stat-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #4285f4;
+    }
+    .stat-label {
+        font-size: 14px;
+        color: #6c757d;
+    }
+    .chart-container {
+        height: 300px;
+        margin-bottom: 30px;
+    }
+    .info-row {
+        display: flex;
+        margin-bottom: 10px;
+    }
+    .info-label {
+        width: 150px;
+        font-weight: bold;
+    }
+    .info-value {
+        flex-grow: 1;
+    }
+</style>
+
+<div class="container">
+    <div class="profile-card">
+        <h2>User Profile: {{ user.username }}</h2>
+
+        <div class="info-row">
+            <div class="info-label">User ID:</div>
+            <div class="info-value">{{ user.id }}</div>
+        </div>
+
+        <div class="info-row">
+            <div class="info-label">Last login:</div>
+            <div class="info-value">{{ last_login|naturaltime }}</div>
+        </div>
+
+        <div class="info-row">
+            <div class="info-label">Member since:</div>
+            <div class="info-value">on {{ date_joined|date:"F jS, Y" }}</div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="stat-card">
+                <div class="stat-value">{{ user_stats.tests_completed }}</div>
+                <div class="stat-label">Tests taken</div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="stat-card">
+                <div class="stat-value">{{ user_stats.best_wpm }}</div>
+                <div class="stat-label">Best WPM</div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="stat-card">
+                <div class="stat-value">{{ user_stats.average_wpm|floatformat:1 }}</div>
+                <div class="stat-label">Average WPM</div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="stat-card">
+                <div class="stat-value">{{ weekly_words }}</div>
+                <div class="stat-label">Words typed this week</div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="stat-card">
+                <div class="stat-value">{{ user_stats.total_chars }}</div>
+                <div class="stat-label">Total characters typed</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="profile-card">
+        <h3>Your Typing Progress</h3>
+        <div class="chart-container">
+            <canvas id="progressChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Include Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // Отримуємо дані для графіка
+    const chartData = JSON.parse('{{ chart_data|escapejs }}');
+
+    // Створюємо графік
+    const ctx = document.getElementById('progressChart').getContext('2d');
+    const progressChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: chartData.dates,
+            datasets: [
+                {
+                    label: 'WPM',
+                    data: chartData.wpm,
+                    borderColor: '#4285f4',
+                    backgroundColor: 'rgba(66, 133, 244, 0.1)',
+                    tension: 0.3,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Accuracy (%)',
+                    data: chartData.accuracy,
+                    borderColor: '#34a853',
+                    backgroundColor: 'rgba(52, 168, 83, 0.1)',
+                    tension: 0.3,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'WPM'
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    min: 0,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Accuracy (%)'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                }
+            }
+        }
+    });
+</script>
+
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends 'layout/basic.html' %}
+
+{% load thumbnail %}
+{% load static %}
+
+{% block content %}
+{% if bbs %}
+<h2>Last 10 goods</h2>
+<div class="vstack gap-3 mt-4 mb-4">
+    {% for bb in bbs %}
+    <div class="card">
+        {% url 'main:bb_detail' rubric_pk=bb.rubric.pk pk=bb.pk as url %}
+        <div class="row p-3">
+            <a class="col-md-2 right-col" href="{{ url }}{{ all }}">
+                {% if bb.image %}
+                <img class="img-fluid" src="{% thumbnail bb.image 'default' %}">
+                {% else %}
+                <img class="img-fluid" src="{% static 'main/empty.jpg' %}">
+                {% endif %}
+            </a>
+            <div class="col-md-10 left-col card-body">
+                <h3 class="card-title"><a href="{{ url }}{{ all }}">
+                    {{ bb.title }}</a></h3>
+                <div class="card-text mb-2">{{ bb.content }}</div>
+                <p class="card-text fw-bold">{{ bb.price }} ₴.</p>
+                <p class="card-text text-end data-below">{{ bb.created_at }}</p>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

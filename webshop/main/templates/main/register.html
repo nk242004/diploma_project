@@ -1,0 +1,14 @@
+{% extends 'layout/basic.html' %}
+
+{% load django_bootstrap5 %}
+
+{% block title %}Registration{% endblock %}
+
+{% block content %}
+<h2>Register new user</h2>
+<form method="post">
+    {% csrf_token %}
+    {% bootstrap_form form layout='horizontal' %}
+    {% bootstrap_button 'Register' %}
+</form>
+{% endblock %}

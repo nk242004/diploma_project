@@ -1,0 +1,407 @@
+{% extends 'layout/basic.html' %}
+
+{% block title %}Multiplayer Typing Game{% endblock %}
+
+{% block content %}
+<style>
+    .container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    .server-information {
+        background: #f5f5f5;
+        padding: 10px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+    }
+    .map {
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 20px;
+        margin-bottom: 20px;
+        position: relative;
+        height: 300px;
+    }
+    .player {
+        margin-bottom: 10px;
+        padding: 10px;
+        border-radius: 5px;
+        background: #f9f9f9;
+        position: relative;
+    }
+    .player-me {
+        background: #e3f2fd;
+        border-left: 4px solid #2196F3;
+    }
+    .player-end {
+        background: #e8f5e9;
+    }
+    .avatar-wrapper {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: #2196F3;
+        position: absolute;
+        transition: left 0.5s ease;
+    }
+    .beating {
+        animation: beating 1s infinite;
+    }
+    .beating-1 { animation-delay: 0s; }
+    .beating-2 { animation-delay: 0.3s; }
+    @keyframes beating {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); }
+    }
+    .game-result-wrapper {
+        margin-top: 20px;
+    }
+    .game-result-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .game-result-table th, .game-result-table td {
+        padding: 8px;
+        border: 1px solid #ddd;
+        text-align: left;
+    }
+    .game-result-table th {
+        background: #f5f5f5;
+    }
+    .correct { color: green; }
+    .wrong { color: red; }
+    #words {
+        font-size: 24px;
+        line-height: 1.5;
+        margin-bottom: 20px;
+        background: #fafafa;
+        padding: 20px;
+        border-radius: 5px;
+        border: 1px solid #ddd;
+    }
+    #words span.current {
+        background: #ffee99;
+    }
+    #words span.correct {
+        color: green;
+    }
+    #words span.wrong {
+        color: red;
+    }
+    #input {
+        width: 100%;
+        padding: 10px;
+        font-size: 18px;
+        margin-bottom: 20px;
+    }
+    .btn-new-game {
+        background: #4CAF50;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+</style>
+
+<div class="container">
+    <div id="game">
+        <div class="server-information">
+            <div class="info info-server">
+                Number of players on the server: <span id="player-count">0</span>
+            </div>
+        </div>
+        
+        <div class="map">
+            <span class="status" id="game-status">Waiting for players...</span>
+            <div id="players-container">
+                <!-- Players will be added here dynamically -->
+            </div>
+        </div>
+        
+        <div id="typing-area" style="display: none;">
+            <div id="words"></div>
+            <input type="text" id="input" autofocus>
+            <div id="timer">60</div>
+        </div>
+        
+        <div class="game-result-wrapper" id="results" style="display: none;">
+            <div class="game-result more-game-result">
+                <table class="game-result-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>WPM</th>
+                            <th>Keystrokes</th>
+                            <th>Accuracy</th>
+                            <th>Correct words</th>
+                            <th>Wrong words</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-body">
+                        <!-- Results will be added here -->
+                    </tbody>
+                </table>
+            </div>
+            <button class="btn-new-game" id="new-game-btn">New Game</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const roomName = 'public_room';
+    const username = '{{ username }}';
+    let socket = new WebSocket(`ws://${window.location.host}/ws/multiplayer/${roomName}/`);
+    let players = {};
+    let gameActive = false;
+    let timeLeft = 60;
+    let timerInterval;
+    let currentWordIndex = 0;
+    let correctWords = 0;
+    let wrongWords = 0;
+    let correctChars = 0;
+    let wrongChars = 0;
+    let words = [];
+    
+    // WebSocket handlers
+    socket.onopen = function(e) {
+        console.log("WebSocket connection established");
+        updatePlayerCount(1); // You joined
+    };
+    
+    socket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        
+        if (data.type === 'player_count') {
+            updatePlayerCount(data.count);
+        }
+        else if (data.type === 'player_progress') {
+            updatePlayerProgress(data.username, data.progress, data.wpm, data.accuracy);
+        }
+        else if (data.type === 'game_start') {
+            startGame(data.text, data.duration);
+        }
+    };
+    
+    socket.onclose = function(e) {
+        console.log("WebSocket connection closed");
+    };
+    
+    // Update player count display
+    function updatePlayerCount(count) {
+        document.getElementById('player-count').textContent = count;
+    }
+    
+    // Update player progress display
+    function updatePlayerProgress(username, progress, wpm, accuracy) {
+        if (!players[username]) {
+            addPlayer(username);
+        }
+        
+        const playerEl = document.getElementById(`player-${username}`);
+        if (playerEl) {
+            const progressEl = playerEl.querySelector('.progress');
+            const wpmEl = playerEl.querySelector('.wpm');
+            
+            if (progressEl) progressEl.style.width = `${progress}%`;
+            if (wpmEl) wpmEl.textContent = `${Math.round(wpm)} WPM`;
+        }
+    }
+    
+    // Add new player to display
+    function addPlayer(username) {
+        players[username] = { progress: 0, wpm: 0 };
+        
+        const playersContainer = document.getElementById('players-container');
+        const playerEl = document.createElement('div');
+        playerEl.className = `player ${username === '{{ username }}' ? 'player-me' : ''}`;
+        playerEl.id = `player-${username}`;
+        playerEl.innerHTML = `
+            <div class="metadata-wrapper">
+                <div class="userinfo-wrapper">
+                    <span>${username}</span>
+                </div>
+                <div class="results-wrapper">
+                    <div class="result wpm">0 WPM</div>
+                </div>
+            </div>
+            <div class="payload-wrapper">
+                <div class="progress-bar" style="width: 100%; height: 5px; background: #eee;">
+                    <div class="progress" style="width: 0%; height: 100%; background: #4CAF50;"></div>
+                </div>
+            </div>
+        `;
+        playersContainer.appendChild(playerEl);
+    }
+    
+    // Start the game
+    function startGame(text, duration) {
+        gameActive = true;
+        timeLeft = duration;
+        words = text.split(' ');
+        currentWordIndex = 0;
+        correctWords = 0;
+        wrongWords = 0;
+        correctChars = 0;
+        wrongChars = 0;
+        
+        document.getElementById('game-status').textContent = 'Game started!';
+        document.getElementById('typing-area').style.display = 'block';
+        document.getElementById('results').style.display = 'none';
+        
+        // Display words
+        const wordsEl = document.getElementById('words');
+        wordsEl.innerHTML = '';
+        words.forEach((word, i) => {
+            const span = document.createElement('span');
+            span.textContent = word + ' ';
+            if (i === 0) span.classList.add('current');
+            wordsEl.appendChild(span);
+        });
+        
+        // Start timer
+        clearInterval(timerInterval);
+        document.getElementById('timer').textContent = timeLeft;
+        timerInterval = setInterval(updateTimer, 1000);
+    }
+    
+    // Update timer
+    function updateTimer() {
+        timeLeft--;
+        document.getElementById('timer').textContent = timeLeft;
+        
+        if (timeLeft <= 0) {
+            endGame();
+        }
+    }
+    
+    // End the game
+    function endGame() {
+        gameActive = false;
+        clearInterval(timerInterval);
+        document.getElementById('input').disabled = true;
+        
+        const wpm = Math.round(correctChars / 5);
+        const accuracy = Math.round((correctChars / (correctChars + wrongChars)) * 100) || 0;
+        
+        // Send results to server
+        socket.send(JSON.stringify({
+            'type': 'game_end',
+            'username': username,
+            'wpm': wpm,
+            'accuracy': accuracy,
+            'correct_words': correctWords,
+            'wrong_words': wrongWords,
+            'time': 60 - timeLeft
+        }));
+        
+        // Show results
+        showResults();
+    }
+    
+    // Show results table
+    function showResults() {
+        document.getElementById('typing-area').style.display = 'none';
+        document.getElementById('results').style.display = 'block';
+        
+        // In a real app, this would come from the server
+        const resultsBody = document.getElementById('results-body');
+        resultsBody.innerHTML = `
+            <tr>
+                <td>${username}</td>
+                <td>${Math.round(correctChars / 5)}<br><small>(words per minute)</small></td>
+                <td><small>(<span class="correct">${correctChars}</span> | <span class="wrong">${wrongChars}</span>)</small> <span>${correctChars + wrongChars}</span></td>
+                <td>${Math.round((correctChars / (correctChars + wrongChars)) * 100)}%</td>
+                <td>${correctWords}</td>
+                <td>${wrongWords}</td>
+                <td>${formatTime(60 - timeLeft)}</td>
+            </tr>
+        `;
+    }
+    
+    // Format time as MM:SS
+    function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // Input handling
+    document.getElementById('input').addEventListener('input', function(e) {
+        if (!gameActive) return;
+        
+        const typed = this.value;
+        const currentWord = words[currentWordIndex];
+        const currentWordEl = document.querySelector('#words span.current');
+        
+        if (currentWord.startsWith(typed)) {
+            currentWordEl.classList.remove('wrong');
+        } else {
+            currentWordEl.classList.add('wrong');
+        }
+    });
+    
+    document.getElementById('input').addEventListener('keydown', function(e) {
+        if (!gameActive) return;
+        
+        if (e.key === ' ') {
+            e.preventDefault();
+            const typed = this.value.trim();
+            const currentWord = words[currentWordIndex];
+            const currentWordEl = document.querySelector('#words span.current');
+            
+            if (typed === currentWord) {
+                currentWordEl.classList.add('correct');
+                correctWords++;
+                correctChars += typed.length;
+            } else {
+                currentWordEl.classList.add('wrong');
+                wrongWords++;
+                wrongChars += typed.length;
+            }
+            
+            // Move to next word
+            currentWordEl.classList.remove('current');
+            currentWordIndex++;
+            
+            if (currentWordIndex < words.length) {
+                document.querySelectorAll('#words span')[currentWordIndex].classList.add('current');
+                
+                // Calculate and send progress
+                const progress = Math.round((currentWordIndex / words.length) * 100);
+                const wpm = Math.round((correctChars / 5) / ((60 - timeLeft) / 60)) || 0;
+                const accuracy = Math.round((correctChars / (correctChars + wrongChars)) * 100) || 0;
+                
+                socket.send(JSON.stringify({
+                    'type': 'player_progress',
+                    'username': username,
+                    'progress': progress,
+                    'wpm': wpm,
+                    'accuracy': accuracy
+                }));
+            } else {
+                endGame();
+            }
+            
+            this.value = '';
+        }
+        
+        if (e.key === 'Backspace') {
+            wrongChars++;
+        }
+    });
+    
+    // New game button
+    document.getElementById('new-game-btn').addEventListener('click', function() {
+        socket.send(JSON.stringify({
+            'type': 'request_game_start',
+            'username': username
+        }));
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,218 @@
+{% extends 'layout/basic.html' %}
+
+{% block title %}About our site{% endblock %}
+{% block content %}
+
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        textarea { width: 100%; height: 150px; margin-top: 10px; }
+        select, button { margin-top: 10px; padding: 10px; font-size: 16px; }
+        #words span.correct { color: green; }
+        #words span.wrong { color: red; }
+        #words span.current { background-color: yellow; }
+        #words {
+            border: 2px solid #4285f4;
+            padding: 20px;
+            height: 220px;
+            overflow: hidden;
+            font-size: 24px;
+            line-height: 1.8em;
+            margin-bottom: 20px;
+            background: #fafafa;
+            border-radius: 6px;
+        }
+        #input { width: 100%; font-size: 24px; padding: 10px; border: 2px solid #ddd; border-radius: 6px; }
+        #timer { font-size: 24px; float: right; }
+        #refresh-btn { margin-top: 10px; float: left; background: #f44336; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; }
+        #result { margin-top: 30px; font-size: 18px; }
+        .word-line { display: block; margin-bottom: 10px; }
+        .hidden { display: none; }
+        .settings-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .settings-panel {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 6px;
+        }
+        .test-active #settings-panel {
+            display: none;
+        }
+        .test-active #test-container {
+            display: block;
+        }
+        #test-container {
+            display: none;
+        }
+    </style>
+
+    <div id="container" class="{% if test_started %}test-active{% endif %}">
+        <h2>🎯 Створити власний тест</h2>
+
+        <div id="settings-panel">
+            <form method="post" id="test-settings">
+                {% csrf_token %}
+
+                <label>
+                    <input type="checkbox" name="randomize" {% if randomize %}checked{% endif %}> Randomize
+                </label>
+
+                <div id="word-area">
+                    <label for="custom_words">Введіть власні слова (через пробіл):</label>
+                    <textarea name="custom_words">{{ custom_words }}</textarea>
+                </div>
+
+                <label for="duration">Тривалість тесту:</label>
+                <select name="duration">
+                    <option value="30">30 секунд</option>
+                    <option value="60" selected>1 хвилина</option>
+                    <option value="300">5 хвилин</option>
+                    <option value="600">10 хвилин</option>
+                </select>
+
+                <br>
+                <button type="submit" id="start-btn">Старт</button>
+            </form>
+        </div>
+
+        <div id="test-container">
+            <button class="settings-btn" onclick="toggleSettings()">Показати налаштування тесту</button>
+
+            <div id="timer">{{ duration|default:60 }}</div>
+            <button id="refresh-btn" onclick="location.reload()">Обновити</button>
+            <div class="clear"></div>
+
+            <div id="words">
+                {% for word in words %}
+                    {% if forloop.counter0|divisibleby:20 %}<div class="word-line" id="line-{{ forloop.counter0|divisibleby:20 }}">{% endif %}
+                        <span>{{ word }}</span>
+                    {% if forloop.counter|divisibleby:20 or forloop.last %}</div>{% endif %}
+                {% endfor %}
+            </div>
+
+            <input type="text" id="input" autofocus>
+            <div id="result"></div>
+        </div>
+    </div>
+
+    <script>
+        function toggleSettings() {
+            const container = document.getElementById('container');
+            container.classList.toggle('test-active');
+        }
+
+        {% if test_started %}
+        const words = document.querySelectorAll("#words span");
+        const input = document.getElementById("input");
+        const timerEl = document.getElementById("timer");
+        const resultEl = document.getElementById("result");
+        const wordLines = document.querySelectorAll(".word-line");
+
+        let current = 0, timeLeft = {{ duration|default:60 }}, timerStarted = false;
+        let correctWords = 0, wrongWords = 0, correctChars = 0, wrongChars = 0;
+
+        // Показуємо перші два рядки
+        if (wordLines.length > 0) wordLines[0].style.display = 'block';
+        if (wordLines.length > 1) wordLines[1].style.display = 'block';
+
+        words[current].classList.add("current");
+
+        input.addEventListener("input", () => {
+            if (!timerStarted) {
+                startTimer();
+                timerStarted = true;
+            }
+
+            const typed = input.value;
+            const target = words[current].textContent;
+
+            if (target.startsWith(typed)) {
+                words[current].classList.remove("wrong");
+            } else {
+                words[current].classList.add("wrong");
+            }
+        });
+
+        input.addEventListener("keydown", (e) => {
+            if (e.key === " ") {
+                e.preventDefault();
+                const typed = input.value.trim();
+                const target = words[current].textContent;
+
+                if (typed === target) {
+                    words[current].classList.add("correct");
+                    correctWords++;
+                    correctChars += typed.length;
+                } else {
+                    words[current].classList.add("wrong");
+                    wrongWords++;
+                    wrongChars += typed.length;
+                }
+
+                words[current].classList.remove("current");
+                current++;
+
+                // Перевіряємо, чи треба оновити рядки
+                const currentLine = Math.floor((current - 1) / 20);
+                if (current % 20 === 0) {
+                    // Ховаємо найстаріший видимий рядок
+                    const visibleLines = Array.from(wordLines).filter(line => line.style.display === 'block');
+                    if (visibleLines.length > 0) {
+                        visibleLines[0].style.display = 'none';
+                    }
+
+                    // Показуємо новий рядок, якщо він є
+                    if (currentLine + 2 < wordLines.length) {
+                        wordLines[currentLine + 2].style.display = 'block';
+                    }
+                }
+
+                if (current < words.length) {
+                    words[current].classList.add("current");
+                }
+
+                input.value = '';
+            }
+
+            if (e.key === "Backspace") wrongChars++;
+        });
+
+        function startTimer() {
+            const interval = setInterval(() => {
+                timeLeft--;
+                timerEl.textContent = timeLeft;
+
+                if (timeLeft === 0) {
+                    clearInterval(interval);
+                    input.disabled = true;
+                    if ((correctWords + wrongWords) < 15) {
+                        alert("Чи ви афк?");
+                    }
+                    showResults();
+                }
+            }, 1000);
+        }
+
+        function showResults() {
+            let wpm = Math.round(correctChars / 5);
+            resultEl.innerHTML = `
+                <h3>Результати</h3>
+                <p>Слів за хвилину (WPM): <strong>${wpm}</strong></p>
+                <p>Правильних слів: <strong>${correctWords}</strong></p>
+                <p>Неправильних слів: <strong>${wrongWords}</strong></p>
+                <p>Правильно введено символів: <strong>${correctChars}</strong></p>
+                <p>Неправильно введено символів: <strong>${wrongChars}</strong></p>
+            `;
+        }
+        {% endif %}
+    </script>
+
+{% endblock %}

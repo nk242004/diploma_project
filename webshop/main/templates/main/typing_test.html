@@ -1,0 +1,304 @@
+{% extends 'layout/basic.html' %}
+
+{% load thumbnail %}
+{% load static %}
+{% load django_bootstrap5 %}
+
+{% block title %}{{ rubric }}{% endblock %}
+
+{% block content %}
+
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <style>
+        #words span.correct { color: green; }
+        #words span.wrong { color: red; }
+        #words span.current { background-color: yellow; }
+    </style>
+
+<title>Typing Trainer</title>
+    <style>
+        body { font-family: sans-serif; background: #f0f0f0; padding: 20px; }
+        #container { max-width: 900px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; }
+        #words {
+            border: 2px solid #4285f4;
+            padding: 20px;
+            height: 220px; /* Збільшено для двох рядків */
+            overflow: hidden;
+            font-size: 24px;
+            line-height: 1.8em;
+            margin-bottom: 20px;
+            background: #fafafa;
+            border-radius: 6px;
+        }
+        #words span.current { background: #ffee99; border-radius: 4px; }
+        #words span.correct { color: green; }
+        #words span.wrong { color: red; }
+        #input { width: 100%; font-size: 24px; padding: 10px; border: 2px solid #ddd; border-radius: 6px; }
+        #timer { font-size: 24px; float: right; }
+        #refresh-btn { margin-top: 10px; float: left; background: #f44336; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; }
+        #result { margin-top: 30px; font-size: 18px; }
+        table.leaderboard { width: 100%; margin-top: 30px; border-collapse: collapse; background: #fff; }
+        table.leaderboard th, table.leaderboard td {
+            border: 1px solid #ddd; padding: 10px; text-align: left;
+        }
+        table.leaderboard th {
+            background: #4285f4; color: white; font-weight: bold;
+        }
+        .clear { clear: both; }
+        .word-line { display: block; margin-bottom: 10px; }
+        .settings-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .settings-panel {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 6px;
+        }
+    </style>
+
+    <div id="container">
+        <form method="get">
+            <label>Мова:</label>
+            <select name="lang" onchange="this.form.submit()">
+                <option value="en" {% if selected_lang == 'en' %}selected{% endif %}>English</option>
+                <option value="uk" {% if selected_lang == 'uk' %}selected{% endif %}>Українська</option>
+                <option value="es" {% if selected_lang == 'es' %}selected{% endif %}>Español</option>
+                <option value="de" {% if selected_lang == 'de' %}selected{% endif %}>Deutsch</option>
+                <option value="fr" {% if selected_lang == 'fr' %}selected{% endif %}>Français</option>
+                <option value="it" {% if selected_lang == 'it' %}selected{% endif %}>Italiano</option>
+                <option value="pl" {% if selected_lang == 'pl' %}selected{% endif %}>Polski</option>
+                <option value="nl" {% if selected_lang == 'nl' %}selected{% endif %}>Nederlands</option>
+                <option value="zh" {% if selected_lang == 'zh' %}selected{% endif %}>中文</option>
+                <option value="ja" {% if selected_lang == 'ja' %}selected{% endif %}>日本語</option>
+                <option value="hi" {% if selected_lang == 'hi' %}selected{% endif %}>हिन्दी</option>
+            </select>
+
+        </form>
+
+        <div id="timer">60</div>
+        <button id="refresh-btn" onclick="location.reload()">Обновити</button>
+        <div class="clear"></div>
+
+        <div id="words">
+            {% for word in words %}
+                {% if forloop.counter0|divisibleby:20 %}<div class="word-line" id="line-{{ forloop.counter0|divisibleby:20 }}">{% endif %}
+                    <span>{{ word }}</span>
+                {% if forloop.counter|divisibleby:20 or forloop.last %}</div>{% endif %}
+            {% endfor %}
+        </div>
+
+        <input type="text" id="input" autofocus>
+        <div id="result"></div>
+
+        <!-- Тут ваші вкладки з лідерами -->
+                <div style="margin-top:30px;">
+            <button onclick="showTab('tab1')">🏆 Кількість тестів</button>
+            <button onclick="showTab('tab2')">🚀 WPM</button>
+            <button onclick="showTab('tab3')">📈 Успіхи</button>
+        </div>
+
+        <div id="tab1" class="tab-content">
+            <h3>Топ 20 по кількості тестів</h3>
+            <table class="leaderboard">
+                <thead>
+                    <tr><th>Місце</th><th>Користувач</th><th>Тестів</th></tr>
+                </thead>
+                <tbody>
+                    {% for stat in top_tests %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td>{{ stat.user.username }}</td>
+                            <td>{{ stat.tests_completed }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div id="tab2" class="tab-content" style="display:none">
+            <h3>Топ 20 по WPM</h3>
+            <table class="leaderboard">
+                <thead>
+                    <tr><th>Місце</th><th>Користувач</th><th>WPM</th></tr>
+                </thead>
+                <tbody>
+                    {% for stat in top_wpm %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td>{{ stat.user.username }}</td>
+                            <td>{{ stat.best_wpm }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div id="tab3" class="tab-content" style="display:none">
+            <h3>Топ 20 по успішності</h3>
+            <table class="leaderboard">
+                <thead>
+                    <tr><th>Місце</th><th>Користувач</th><th>Точність</th></tr>
+                </thead>
+                <tbody>
+                    {% for user in top_accuracy %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td>{{ user.user__username }}</td>
+                            <td>{{ user.avg_accuracy|floatformat:2 }}%</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Ваш JavaScript код залишається незмінним
+
+
+
+        const words = document.querySelectorAll("#words span");
+        const input = document.getElementById("input");
+        const timerEl = document.getElementById("timer");
+        const resultEl = document.getElementById("result");
+        const wordLines = document.querySelectorAll(".word-line");
+
+        let current = 0, timeLeft = 60, timerStarted = false;
+        let correctWords = 0, wrongWords = 0, correctChars = 0, wrongChars = 0;
+
+        // Показуємо перші два рядки
+        if (wordLines.length > 0) wordLines[0].style.display = 'block';
+        if (wordLines.length > 1) wordLines[1].style.display = 'block';
+
+        words[current].classList.add("current");
+
+        input.addEventListener("input", () => {
+            if (!timerStarted) {
+                startTimer();
+                timerStarted = true;
+            }
+
+            const typed = input.value;
+            const target = words[current].textContent;
+
+            if (target.startsWith(typed)) {
+                words[current].classList.remove("wrong");
+            } else {
+                words[current].classList.add("wrong");
+            }
+        });
+
+        input.addEventListener("keydown", (e) => {
+            if (e.key === " ") {
+                e.preventDefault();
+                const typed = input.value.trim();
+                const target = words[current].textContent;
+
+                if (typed === target) {
+                    words[current].classList.add("correct");
+                    correctWords++;
+                    correctChars += typed.length;
+                } else {
+                    words[current].classList.add("wrong");
+                    wrongWords++;
+                    wrongChars += typed.length;
+                }
+
+                words[current].classList.remove("current");
+                current++;
+
+                // Перевіряємо, чи треба оновити рядки
+                const currentLine = Math.floor((current - 1) / 20);
+                if (current % 20 === 0) {
+                    // Ховаємо найстаріший видимий рядок
+                    const visibleLines = Array.from(wordLines).filter(line => line.style.display === 'block');
+                    if (visibleLines.length > 0) {
+                        visibleLines[0].style.display = 'none';
+                    }
+
+                    // Показуємо новий рядок, якщо він є
+                    if (currentLine + 2 < wordLines.length) {
+                        wordLines[currentLine + 2].style.display = 'block';
+                    }
+                }
+
+                if (current < words.length) {
+                    words[current].classList.add("current");
+                }
+
+                input.value = '';
+            }
+
+            if (e.key === "Backspace") wrongChars++;
+        });
+
+        function startTimer() {
+            const interval = setInterval(() => {
+                timeLeft--;
+                timerEl.textContent = timeLeft;
+
+                if (timeLeft === 0) {
+                    clearInterval(interval);
+                    input.disabled = true;
+                    if ((correctWords + wrongWords) < 15) {
+                        alert("Чи ви афк?");
+                    }
+                    showResults();
+                }
+            }, 1000);
+        }
+
+        function showResults() {
+            let wpm = Math.round(correctChars / 5);
+            let accuracy = Math.round((correctChars / (correctChars + wrongChars)) * 100) || 0;
+
+            resultEl.innerHTML = `
+                <h3>Результати</h3>
+                <p>Слів за хвилину (WPM): <strong>${wpm}</strong></p>
+                <p>Точність: <strong>${accuracy}%</strong></p>
+                <p>Правильних слів: <strong>${correctWords}</strong></p>
+                <p>Неправильних слів: <strong>${wrongWords}</strong></p>
+                <p>Правильно введено символів: <strong>${correctChars}</strong></p>
+                <p>Неправильно введено символів: <strong>${wrongChars}</strong></p>
+            `;
+
+            // Відправляємо результати на сервер, якщо користувач авторизований
+            if ({{ request.user.is_authenticated|yesno:"true,false" }}) {
+                const formData = new FormData();
+                formData.append('wpm', wpm);
+                formData.append('accuracy', accuracy);
+                formData.append('correct_words', correctWords);
+                formData.append('wrong_words', wrongWords);
+                formData.append('correct_chars', correctChars);
+                formData.append('wrong_chars', wrongChars);
+
+                fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                    },
+                }).then(response => {
+                    if (response.redirected) {
+                        window.location.href = response.url;
+                    }
+                });
+            }
+        }
+
+        function showTab(tabId) {
+            document.querySelectorAll(".tab-content").forEach(tab => tab.style.display = "none");
+            document.getElementById(tabId).style.display = "block";
+        }
+    </script>
+
+{% endblock %}

@@ -1,0 +1,12 @@
+Dear User {{ user.username }}!
+
+You are registered on site "Web Shop".
+You need to went through activation, to confirm your personality.
+To do this, please click on the link below
+
+{{ host }}{% url 'main:activate' sign=sign %}
+
+Farewell!
+
+Sincerely yours, "Web Shop" site administration
+

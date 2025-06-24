@@ -1,0 +1,264 @@
+{% extends 'layout/basic.html' %}
+
+{% block title %}Навчання: {{ test_name }}{% endblock %}
+
+{% block content %}
+<style>
+    #learning-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    
+    #instructions {
+        background: #f5f5f5;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+    
+    #words-display {
+        font-size: 24px;
+        line-height: 1.8;
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #fafafa;
+        border-radius: 5px;
+        border: 1px solid #ddd;
+    }
+    
+    #words-display span.current {
+        background: #ffee99;
+        border-radius: 3px;
+    }
+    
+    #words-display span.correct {
+        color: green;
+    }
+    
+    #words-display span.wrong {
+        color: red;
+        text-decoration: underline;
+    }
+    
+    #input-field {
+        width: 100%;
+        padding: 10px;
+        font-size: 18px;
+        margin-bottom: 15px;
+    }
+    
+    #stats {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+    
+    .stat-box {
+        background: #e3f2fd;
+        padding: 10px;
+        border-radius: 5px;
+        text-align: center;
+        flex: 1;
+        margin: 0 5px;
+    }
+    
+    .stat-value {
+        font-size: 24px;
+        font-weight: bold;
+    }
+    
+    .stat-label {
+        font-size: 12px;
+        color: #666;
+    }
+</style>
+
+<div id="learning-container">
+    <h1>Навчання: {{ test_name }}</h1>
+    
+    <div id="instructions">
+        <p>Введіть слова, які бачите на екрані. Використовуйте правильні пальці для кожної клавіші.</p>
+        <p>Поточний WPM: <span id="current-wpm">0</span></p>
+    </div>
+    
+    <div id="stats">
+        <div class="stat-box">
+            <div class="stat-value" id="accuracy">100%</div>
+            <div class="stat-label">Точність</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value" id="wpm">0</div>
+            <div class="stat-label">WPM</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value" id="time">60</div>
+            <div class="stat-label">Секунд</div>
+        </div>
+    </div>
+    
+    <div id="words-display">
+        {% for word in words %}
+            <span>{{ word }}</span>
+        {% endfor %}
+    </div>
+    
+    <input type="text" id="input-field" autofocus>
+    
+    <button id="restart-btn" class="btn btn-primary">Почати знову</button>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const words = {{ words|safe }};
+    const wordsDisplay = document.getElementById('words-display');
+    const inputField = document.getElementById('input-field');
+    const accuracyDisplay = document.getElementById('accuracy');
+    const wpmDisplay = document.getElementById('wpm');
+    const timeDisplay = document.getElementById('time');
+    const currentWpmDisplay = document.getElementById('current-wpm');
+    const restartBtn = document.getElementById('restart-btn');
+    
+    let currentWordIndex = 0;
+    let correctChars = 0;
+    let wrongChars = 0;
+    let startTime = null;
+    let timerInterval = null;
+    let timeLeft = 60;
+    
+    // Инициализация отображения слов
+    function initWordsDisplay() {
+        wordsDisplay.innerHTML = '';
+        words.forEach((word, index) => {
+            const span = document.createElement('span');
+            span.textContent = word + ' ';
+            if (index === 0) span.classList.add('current');
+            wordsDisplay.appendChild(span);
+        });
+    }
+    
+    // Начать таймер
+    function startTimer() {
+        startTime = new Date();
+        timeLeft = 60;
+        timeDisplay.textContent = timeLeft;
+        
+        timerInterval = setInterval(function() {
+            timeLeft--;
+            timeDisplay.textContent = timeLeft;
+            
+            if (timeLeft <= 0) {
+                finishTest();
+            }
+        }, 1000);
+    }
+    
+    // Завершить тест
+    function finishTest() {
+        clearInterval(timerInterval);
+        inputField.disabled = true;
+        
+        const totalChars = correctChars + wrongChars;
+        const accuracy = totalChars > 0 ? Math.round((correctChars / totalChars) * 100) : 0;
+        const wpm = Math.round((correctChars / 5) / (60 / 60)); // WPM за 1 минуту
+        
+        accuracyDisplay.textContent = accuracy + '%';
+        wpmDisplay.textContent = wpm;
+        
+        // Здесь можно отправить результаты на сервер
+        fetch('/api/save-test-result/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                test_id: '{{ test_id }}',
+                wpm: wpm,
+                accuracy: accuracy,
+                correct_chars: correctChars,
+                wrong_chars: wrongChars
+            })
+        });
+    }
+    
+    // Обработка ввода
+    inputField.addEventListener('input', function() {
+        if (!startTime) startTimer();
+        
+        const currentWord = words[currentWordIndex];
+        const typedText = this.value;
+        const currentWordSpan = wordsDisplay.querySelectorAll('span')[currentWordIndex];
+        
+        // Проверка правильности ввода
+        if (currentWord.startsWith(typedText)) {
+            currentWordSpan.classList.remove('wrong');
+        } else {
+            currentWordSpan.classList.add('wrong');
+        }
+        
+        // Расчет текущего WPM
+        const timeElapsed = (new Date() - startTime) / 1000 / 60; // в минутах
+        const currentWpm = Math.round((correctChars / 5) / timeElapsed) || 0;
+        currentWpmDisplay.textContent = currentWpm;
+    });
+    
+    inputField.addEventListener('keydown', function(e) {
+        if (e.key === ' ') {
+            e.preventDefault();
+            const typedText = this.value.trim();
+            const currentWord = words[currentWordIndex];
+            const currentWordSpan = wordsDisplay.querySelectorAll('span')[currentWordIndex];
+            
+            // Обновление статистики
+            if (typedText === currentWord) {
+                correctChars += currentWord.length;
+                currentWordSpan.classList.add('correct');
+            } else {
+                wrongChars += typedText.length;
+                currentWordSpan.classList.add('wrong');
+            }
+            
+            // Переход к следующему слову
+            currentWordSpan.classList.remove('current');
+            currentWordIndex++;
+            
+            if (currentWordIndex < words.length) {
+                wordsDisplay.querySelectorAll('span')[currentWordIndex].classList.add('current');
+            } else {
+                finishTest();
+            }
+            
+            this.value = '';
+        }
+        
+        if (e.key === 'Backspace') {
+            wrongChars++;
+        }
+    });
+    
+    // Кнопка перезапуска
+    restartBtn.addEventListener('click', function() {
+        currentWordIndex = 0;
+        correctChars = 0;
+        wrongChars = 0;
+        startTime = null;
+        clearInterval(timerInterval);
+        timeLeft = 60;
+        
+        initWordsDisplay();
+        inputField.value = '';
+        inputField.disabled = false;
+        inputField.focus();
+        
+        accuracyDisplay.textContent = '100%';
+        wpmDisplay.textContent = '0';
+        timeDisplay.textContent = '60';
+        currentWpmDisplay.textContent = '0';
+    });
+    
+    // Инициализация
+    initWordsDisplay();
+});
+</script>
+{% endblock %}
